@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="de">            <!-- Sprache-->
+<head>
+  <meta charset="UTF-8">                              <!-- Legt die Zeichenkordierung fest. Sorgt also dafür, dass Sonderzeichen wie ä, ü, ö, ß oder Emojis angezeigt werden.-->
+  <title>Überwachungswebseite für Rentner</title>     <!-- Der Titel des Browser Tabs.-->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Nunito:wght@400;600&display=swap" rel="stylesheet">     <!-- Ein Link der Schriftarten von Goole Fronts aus dem Internet lädt.
+                                                                                                                                              Schriftarten: "Orbitron" und "Nunito"-->
+ 
+  <style>   /*CSS Programmierung Anfang */
+    /* Design */
+    :root { --bg: #0e0b1a;        /*CSS Variablen: --bg -> für die Hintergrundfarbe der Webseite. */
+      --acc: #a855f7;               /* --acc -> Akzentfarbe für die Überschriftfarbe und/oder Highligts. */
+      --text: #e2d9f3; }              /* --text für die normale Textfarbe.*/
+
+
+    * { box-sizing: border-box;         /* Padding (Abstand) und Border (Rahmen) in die Gesamtgröße */
+          margin: 0;                      /*Standartaußenabstand entfernt */
+            padding: 0;                     /* Standartinnenabstand entfernt */
+              font-family: 'Nunito', sans-serif; }      /* Schriftart "Nunito" */
+
+
+    body { background: var(--bg);   /* Hintergrundfarbe der Seite (--bg) */
+      color: var(--text);            /* Textfarbe auf der Seite festsetzen*/
+      padding: 40px; }                 /* Abstand von 40px hinzufügen */
+
+
+    h1, h2, h3, .logo { font-family: 'Orbitron', /* Überschrift mit der Klasse .logo bekommt die Schriftart "Orbitron" */
+     sans-serif; color: var(--acc); }   /* Farbe für Überschrift und Logo */
+
+
+
+
+    /* Oben diese Leiste da */
+    nav { display: flex;                  /* flexbox Layout für Navigation */
+       justify-content: space-between;       /* Abstand */
+       border-bottom: 1px solid rgba(168,85,247,0.3);   /* Linie unten 1px dick mit lila */
+        padding-bottom: 20px;                 /* Innenabstand unten */
+         margin-bottom: 50px; }                 /* Abstand unter der Navigation */
+
+
+    .btn { background: var(--acc);      /* Hintergrundfarbe aus --acc */
+       color: white;                /* Textfarbe weiß */
+        padding: 10px 20px;          /* Innenabstand 10px oben/unten und 20px links/rechts */
+          text-decoration: none;     /* enfernt unterstreichung bei Links */
+           border-radius: 8px;        /* Abgerundete Ecken */
+            font-weight: bold;         /* Schrift fett */
+             transition: 0.3s; }        /* Übergangsanimation für Effekte */
+
+
+    .btn:hover { background: #7c3aed;     /* Hintergrundfarbe ändert sich bei Maus kontakt */
+       transform: scale(1.05); }             /* Button wird 5% größer */
+
+
+
+
+    /* Hauptbereich */
+    .hero { display: flex;    /* Flexbox-Layout: Elemente werden nebeneinander angeordnet */
+       align-items: center;     /* Boxen werden vertikal mittig ausgerichtet */
+        gap: 50px;                /* Abstand von 50px zwischen den Flex-Elementen */
+         margin-bottom: 60px; }     /*Abstand des Hero bereichs */
+
+
+    .hero-text h1 { font-size: 3rem;    /*Große Überschrift*/
+       margin-bottom: 20px; }             /* Abstand unter der Überschrift */
+
+
+    .hero-text p { font-size: 1.2rem;   /* Text ist 1.2 größer als die normale Schrift */
+       line-height: 1.6;                  /* Zeilenabstand für bessere Lesbarkeit */
+        margin-bottom: 30px; }              /* Abstand unter dem Absatz */
+
+
+
+
+    /* Hamster Card */
+    .card { background: rgba(255,255,255,0.05);   /* Hintergrundfarbe weiß mit 5% Deckkraft*/
+       border: 1px solid var(--acc);        /* Rahmen 1px dick mit der Farbe aus --acc*/
+        border-radius: 20px;        /*Runde Ecken der Card */
+         padding: 20px;        /* Innenabstand innerhalb der Karte */
+          text-align: center; }      /* Inhalt wird Mittig ausgerichtet */
+
+
+    .card img { width: 300px;     /* Bildbreite wird auf 300px festgelegt */
+       border-radius: 12px;         /* Bild bekommt abgerundete Ecken */
+        transition: 0.3s; }           /* Animation bei Mauskontakt über 0.3sek. */
+
+
+    .card img:hover { transform: scale(1.05); }   /* Bild wird beim rüber fahren mit der Maus 5% größer */
+
+
+
+
+    /* Unten die Boxen von Patienten Monitor und ALARM */
+    .services { display: flex;        /* Flexbox-layout: Elemente stehen nebeneinander */
+       gap: 20px; }                /*Abstand von 20px zwischen den einzelenen Boxen */
+
+
+    .svc { flex: 1;     /* Jede Box nimmt gleich viel Platz ein */
+       background: rgba(255,255,255,0.05);    /* Hintergrund weiß mit 5% Transparenz */
+        padding: 30px;            /* Innenabstand innerhalb der Box */
+         border-radius: 15px;       /* Abgerundete Ecken */
+          border: 2px solid rgba(168,85,247,0.2); }     /* Rahmen 2px groß und leicht Transparent mit Lila*/
+
+
+    .svc h3 { margin-bottom: 15px; }   /*Abstand unter der Überschrift innerhalb der Box */
+
+
+
+
+    /* Fußzeile */
+    footer { margin-top: 60px;    /* Abstand oberhalb des Footers */
+       text-align: center;         /* Text im Footer wird mittig ausgerichtet */
+        font-size: 0.75rem;         /* Schriftgröße 75% */
+         color: rgba(226,217,243,0.4); }   /* Textfarbe helles Glau mit Transparenz */
+
+
+  </style> <!-- CSS Programmierung Ende -->
+</head>
+
+
+<body>
+  <nav>
+    <div class="logo">RENTNERÜBERWACHUNG</div> <div class="logo">                      </div> <div class="logo">by Laura, Vincent, Oscar and Erik</div>     <!-- Text über den Strich als Kopfzeile -->
+  </nav>
+
+
+  <div class="hero">
+    <div class="hero-text">
+      <h1>Sicherheit,<br>Rund um die Uhr!</h1>      <!-- Überschrift -->
+      <p>Wir bewachen Ihren Renter!</p>             <!-- Text -->
+      <a href="#" class="btn">Monitor öffnen</a>    <!-- Button -->
+    </div>
+   
+    <div class="card">
+      <img src="hamster.png" alt="Hamsteri">        <!-- Bild einfügen aus PNG Datei, wenn nicht vorhanden: "Hamsteri" einsetzen -->
+    </div>
+  </div>
+
+
+  <h2 style="margin-bottom: 20px;">Unsere Dienste</h2>      <!-- Überschrift über den 2 Boxen -->
+  <div class="services">
+    <div class="svc">
+      <h3>📊 Patienten Monitor</h3>                               <!-- Überschrift der Box "Patienten Monitor" (in der box) -->
+      <p>Aktivitäten, übersichtlich auf einem Dashboard.</p>        <!-- Beschreibung in der Box -->
+    </div>
+    <div class="svc" style="border-color: #ef4444;">      <!-- Boxen Farbe Rot -->
+      <h3 style="color: #ef4444;">🚨 ALARM</h3>           <!-- Text Überschrift der Box "ALARM" in Rot -->
+      <p>Sofortige Alarmierung bei kritischen Werten.</p>     <!-- Beschreibung der Box-->
+    </div>
+  </div>
+
+
+ <footer>Powered by Hamsteri</footer>     <!-- Fußzeilen Text -->
+
+
+</body>
+</html>
+
+
+
+
