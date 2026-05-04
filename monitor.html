@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="de">            <!-- Sprache-->
+<head>
+  <meta charset="UTF-8">                            <!-- Legt die Zeichenkordierung fest. Sorgt also dafür, dass Sonderzeichen wie ä, ü, ö, ß oder Emojis angezeigt werden.-->
+  <title>Rentnerüberwachung – Monitor</title>       <!-- Der Titel des Browser Tabs.-->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Nunito:wght@400;600&display=swap" rel="stylesheet">     <!-- Ein Link der Schriftarten von Goole Fronts aus dem Internet lädt.
+                                                                                                                                            Schriftarten: "Orbitron" und "Nunito"-->
+
+
+  <style> /*CSS Programmierung Anfang */
+    /* Design */
+    :root { --bg: #0e0b1a;        /*CSS Variablen: --bg -> für die Hintergrundfarbe der Webseite. */
+         --acc: #a855f7;               /* --acc -> Akzentfarbe für die Überschriftfarbe und/oder Highligts. */
+          --text: #e2d9f3;                  /* --text für die normale Textfarbe.*/
+           --border: rgba(168,85,247,0.3); }    /* Neu hinzugefügt */
+
+
+    * { box-sizing: border-box;         /* Padding (Abstand) und Border (Rahmen) in die Gesamtgröße */
+         margin: 0;                      /*Standartaußenabstand entfernt */
+          padding: 0;                     /* Standartinnenabstand entfernt */
+           font-family: 'Nunito', sans-serif;     /* Schriftart "Nunito" */
+            color: var(--text); }           /* Setzt die Textfarbe --text*/
+   
+    body { background: var(--bg);   /* Hintergrundfarbe der Seite (--bg) */
+         height: 100vh;           /* Höhe des Elements entspricht 100% der ganzen Bildschirmhöhe*/
+          display: flex;            /*Aktiviert Flexbox-Layout */
+           flex-direction: column;      /* Ordnet die Flex-Elemente untereinander, also vertikal, an*/
+            padding: 40px; }               /* Abstand von 40px hinzufügen */
+   
+    h1, h2, h3, .logo { font-family: 'Orbitron', /* Überschrift mit der Klasse .logo bekommt die Schriftart "Orbitron" */
+     sans-serif; color: var(--acc); }   /* Farbe für Überschrift und Logo */
+   
+
+
+    /* Oben diese Leiste da */
+    nav { display: flex;                    /* flexbox Layout für Navigation */
+         justify-content: space-between;            /* Abstand */
+          border-bottom: 1px solid var(--border);      /* Linie unten 1px dick mit lila */
+           padding-bottom: 20px;                    /* Innenabstand unten */
+            margin-bottom: 50px; }              /* Abstand unter der Navigation */
+   
+
+
+    /* Zurück-Button */
+    .btn-back { background: var(--acc);    /* Hintergrundfarbe aus --acc */
+         color: white;                /* Textfarbe weiß */
+          padding: 12px 20px;          /* Innenabstand 10px oben/unten und 20px links/rechts */
+           text-decoration: none;     /* enfernt unterstreichung bei Links */
+            border-radius: 8px;       /* Abgerundete Ecken */
+             font-weight: bold;        /* Schrift fett */
+              transition: 0.3s;         /* Übergangsanimation für Effekte */
+               display: block;            /*Macht das Element zu einem Blockelement */
+                text-align: center;         /*Zentriert den Text horizontal */
+                 margin: 15px 20px; }         /* Außenabstand: 15px oben/unten und 20px links/rechts */
+
+
+    .btn-back:hover { background: #7c3aed;     /* Hintergrundfarbe ändert sich bei Maus kontakt */
+         transform: scale(1.02); }             /* Button wird 2% größer */
+
+
+   
+
+
+    /* Hauptbereich */
+    .main { display: flex;     /*Aktiviert Flexbox-Layout für das Element*/
+         flex: 1;           /* Lässt das Element den verfügbaren Platz innerhalb des Flex ausfüllen */
+          overflow: hidden;    /* Verhindert, dass überstehender Inhalt sichtbar ist */
+           gap: 50px; }         /* Abstand von 50px zwischen den Flex-Elementen */
+
+
+           
+    /* Linke Seite: MONITOR */
+    .monitor { flex: 2;             /* Nimmt doppelt so viel Platz ein wie andere Flex-Elemente mit flex: 1 */
+         display: flex;                 /* Aktiviert Flexbox-Layout für das Element */
+          flex-direction: column; }       /* Ordnet die Kindelemente untereinander an */
+
+
+    .feed { flex: 1;             /* Nimmt verfügbaren Platz im Flex ein (Standardanteil) */
+         background: #000;      /* Setzt den Hintergrund auf schwarz */
+          border-radius: 20px;     /* Macht die Ecken des Elements abgerundet */
+           display: flex;               /* Aktiviert Flexbox-Layout */
+            align-items: center;           /* Zentriert den Inhalt vertikal */
+             justify-content: center;           /* Inhalt horizontal */
+              border: 1px solid var(--border);      /* Fügt einen Rahmen mit --border hinzu */
+               overflow: hidden; }         /* Versteckt überstehenden Inhalt */
+
+
+    .feed img { width: 100%;        /* Bild nimmt die gesamte Breite ein */
+         height: 100%;           /* Bild nimmt die gesamte Höhe ein */
+          object-fit: cover; }      /* Skaliert das Bild so, dass alles vollständig ausgefüllt ist */
+   
+
+
+    /* Rechte Seite: Hamsteri Chat */
+    .chat-panel { flex: 1;       /* Nimmt verfügbaren Platz im Flex ein */
+         min-width: 320px;          /* Mindestbreite von 320px, wird nicht kleiner */
+          display: flex;                /* Aktiviert Flexbox-Layout */
+           flex-direction: column;          /* Ordnet die Inhalte vertikal an */
+            background: rgba(255,255,255,0.05);       /* Halbtransparenter Hintergrund */
+             border-radius: 20px;           /* Abgerundete Ecken */
+              border: 1px solid var(--border);     /* Rahmen mit der Farbe --border */
+               overflow: hidden; }          /* Versteckt überstehenden Inhalt */
+
+
+    .chat-header { padding: 15px 20px;      /* Innenabstand: 15px oben/unten, 20px links/rechts */
+         border-bottom: 1px solid var(--border);        /* Unterer Rahmen mit --border */
+          font-weight: bold;        /* Macht den Text fett */
+           color: var(--acc);        /* Textfarbe --acc */
+            display: flex;               /* Aktiviert Flexbox-Layout */
+             align-items: center;       /* Inhalte vertikal */
+              gap: 15px;                            /* Abstand von 15px zwischen den Elementen */
+               background: rgba(0,0,0,0.2); }    /* Leicht transparenter schwarzer Hintergrund */
+
+
+    .chat-header img { width: 45px;            /* Breite des Bildes auf 45px setzen */
+         height: 45px;                        /* Höhe des Bildes auf 45px setzen */
+          border-radius: 50%;                /* Macht das Bild rund (Kreisform) */
+           object-fit: cover;               /* Skaliert das Bild, damit es den Kasten ausfüllt und ggf. zugeschnitten wird */
+            border: 1px solid var(--acc); }        /* Rahmen mit der Farbe --acc */
+   
+    .chat-messages { flex: 1;       /* Nimmt den verbleibenden Platz im Flex ein */
+         overflow-y: auto;          /* Ermöglicht Scrollen */
+          padding: 20px;             /* Innenabstand rundherum 20px */
+           display: flex;                 /* Aktiviert Flexbox-Layout */
+            flex-direction: column;      /* Ordnet die Nachrichten untereinander an */
+             gap: 15px; }               /* Abstand von 15px zwischen den Nachrichten */
+   
+    .msg { padding: 12px 18px;      /* Innenabstand: 12px oben/unten, 18px links/rechts */
+         border-radius: 12px;      /* Abgerundete Ecken der Nachricht */
+          line-height: 1.5;        /* Zeilenhöhe auf 1,5 */
+           font-size: 0.95rem; }    /* Schriftgröße kleiner als Standardtext */
+
+
+    .msg.bot { background: rgba(168,85,247,0.15);       /* leicht transparenter Hintergrund für Bot-Nachrichten */
+         border: 1px solid rgba(168,85,247,0.2);       /* 1px Rahmen  */
+          border-left: 4px solid var(--acc); }          /* Linker Balken mit Farbe --acc */
+
+
+  </style> <!-- CSS Programmierung Ende -->
+</head>
+
+
+<body>
+  <nav>
+    <div class="logo">KAMERA-MONITOR</div>     <!-- Text über den Strich als Kopfzeile -->
+  </nav>
+
+
+  <div class="main">
+    <div class="monitor">
+      <div class="feed">
+        <img src="http://PI5_IP_:8080/?action=stream" alt="(Verbindung wird gesucht...)">       <!-- Zeigt den Live-Stream von der Kamera an; Alt-Text erscheint, falls Verbindung nicht hergestellt wird -->
+      </div>
+    </div>
+
+
+    <div class="chat-panel">
+     
+      <div class="chat-header">
+        <img src="hamster.png" alt="Hamsteri">        <!-- Bild einfügen aus PNG Datei, wenn nicht vorhanden: "Hamsteri" einsetzen -->
+        <div>
+          <div>Hamsteri</div>  <!--Hamsteri name -->
+          <div style="font-size: 0.75rem; color: #34d399; font-family: 'Nunito', sans-serif;">● Live Beobachtung aktiv</div> <!-- Zeigt an, dass die Live-Überwachung gerade läuft -->
+        </div>
+      </div>
+     
+      <div class="chat-messages">
+        <div class="msg bot">
+          Verbindung konnte nicht hergestellt werden. Warte auf Verbindung mit dem Raspberry Pi 5🐹 <!-- Nachricht für den Benutzer -->
+        </div>
+      </div>
+
+
+      <a href="Webside.html" class="btn-back">← Zurück zur Startseite</a> <!-- Link, um zurück zur Startseite zu navigieren -->
+
+
+    </div>
+  </div>
+
+
+</body>
+</html>
