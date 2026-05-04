@@ -1,300 +1,259 @@
 #!/usr/bin/env python3
 """
-Patient Fall Detection Monitor
-Raspberry Pi 5 - Local Network Only
+Raspberry Pi 5 – Kamera-Livestream im Browser
+Abhängigkeiten:  pip install flask picamera2
+Starten:         python3 camera_stream.py
+Browser:         http://<raspi-ip>:5000
 """
 
-import cv2
+import io
 import threading
 import time
-import base64
-import json
-import os
-import requests
-import logging
-from datetime import datetime
-from functools import wraps
-from flask import Flask, render_template, Response, request, session, redirect, url_for, jsonify
-from flask_socketio import SocketIO, emit
+from flask import Flask, Response, render_template_string
 
-# ── Configuration ──────────────────────────────────────────────────────────────
-PASSWORD = os.environ.get("MONITOR_PASSWORD", "geheim123")
-SECRET_KEY = os.environ.get("SECRET_KEY", "dein-geheimer-schluessel-aendern!")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-AI_CHECK_INTERVAL = 5       # seconds between AI analysis
-ALERT_COOLDOWN = 30         # seconds between repeated alerts
-CAMERA_INDEX = 0            # /dev/video0
+try:
+    from picamera2 import Picamera2
+    from picamera2.encoders import JpegEncoder
+    from picamera2.outputs import FileOutput
+    PICAMERA_AVAILABLE = True
+except ImportError:
+    PICAMERA_AVAILABLE = False
+    print("⚠  picamera2 nicht gefunden – Demo-Modus aktiv (kein echtes Bild).")
 
-# ── App Setup ──────────────────────────────────────────────────────────────────
-app = Flask(__name__)
-app.secret_key = SECRET_KEY
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+# ---------------------------------------------------------------------------
+# Konfiguration
+# ---------------------------------------------------------------------------
+HOST        = "0.0.0.0"
+PORT        = 5000
+RESOLUTION  = (1280, 720)   # Breite × Höhe
+FRAMERATE   = 30            # Frames pro Sekunde
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-log = logging.getLogger(__name__)
+# ---------------------------------------------------------------------------
+# Streaming-Klassen
+# ---------------------------------------------------------------------------
+class StreamOutput(io.BufferedIOBase):
+    """Puffer für den aktuellen JPEG-Frame."""
+    def __init__(self):
+        self.frame: bytes = b""
+        self.condition = threading.Condition()
 
-# ── Camera ─────────────────────────────────────────────────────────────────────
+    def write(self, buf: bytes) -> int:
+        with self.condition:
+            self.frame = buf
+            self.condition.notify_all()
+        return len(buf)
+
+
 class Camera:
+    """Verwaltet die Picamera2-Instanz und den JPEG-Stream."""
     def __init__(self):
-        self.cap = None
-        self.frame = None
-        self.lock = threading.Lock()
-        self.running = False
-        self._init_camera()
+        self.output = StreamOutput()
+        if not PICAMERA_AVAILABLE:
+            return
 
-    def _init_camera(self):
-        try:
-            self.cap = cv2.VideoCapture(CAMERA_INDEX)
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-            self.cap.set(cv2.CAP_PROP_FPS, 30)
-            if not self.cap.isOpened():
-                raise RuntimeError("Kamera nicht gefunden")
-            self.running = True
-            threading.Thread(target=self._capture_loop, daemon=True).start()
-            log.info("Kamera gestartet")
-        except Exception as e:
-            log.error(f"Kamera Fehler: {e}")
-            self.running = False
+        self.cam = Picamera2()
+        config = self.cam.create_video_configuration(
+            main={"size": RESOLUTION},
+            controls={"FrameRate": FRAMERATE},
+        )
+        self.cam.configure(config)
+        self.cam.start_recording(JpegEncoder(), FileOutput(self.output))
+        print(f"✅  Kamera gestartet – {RESOLUTION[0]}×{RESOLUTION[1]} @ {FRAMERATE} fps")
 
-    def _capture_loop(self):
-        while self.running:
-            ret, frame = self.cap.read()
-            if ret:
-                with self.lock:
-                    self.frame = frame
-            else:
-                time.sleep(0.1)
+    def get_frame(self) -> bytes:
+        if not PICAMERA_AVAILABLE:
+            # Demo: leeres graues JPEG zurückgeben
+            return self._dummy_frame()
+        with self.output.condition:
+            self.output.condition.wait()
+            return self.output.frame
 
-    def get_frame(self):
-        with self.lock:
-            return self.frame.copy() if self.frame is not None else None
-
-    def get_jpeg(self):
-        frame = self.get_frame()
-        if frame is None:
-            return None
-        _, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        return buf.tobytes()
-
-    def get_base64(self):
-        jpeg = self.get_jpeg()
-        if jpeg is None:
-            return None
-        return base64.b64encode(jpeg).decode('utf-8')
-
-camera = Camera()
-
-# ── Alert State ────────────────────────────────────────────────────────────────
-class AlertManager:
-    def __init__(self):
-        self.alerts = []
-        self.last_alert_time = 0
-        self.status = "monitoring"   # monitoring | warning | alert
-        self.last_analysis = "Überwachung läuft..."
-        self.lock = threading.Lock()
-
-    def add_alert(self, message, level="warning"):
-        now = time.time()
-        with self.lock:
-            if now - self.last_alert_time < ALERT_COOLDOWN and level != "critical":
-                return
-            self.last_alert_time = now
-            entry = {
-                "time": datetime.now().strftime("%H:%M:%S"),
-                "message": message,
-                "level": level
-            }
-            self.alerts.insert(0, entry)
-            self.alerts = self.alerts[:50]   # keep last 50
-            self.status = level
-        # Emit via websocket
-        socketio.emit('alert', entry)
-        log.warning(f"ALERT [{level}]: {message}")
-
-alerts = AlertManager()
-
-# ── AI Monitoring ──────────────────────────────────────────────────────────────
-def analyze_frame_with_claude(b64_image):
-    """Send frame to Claude claude-sonnet-4-20250514 for fall detection."""
-    if not ANTHROPIC_API_KEY:
-        return None, "Kein API-Key konfiguriert"
-
-    try:
-        response = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
-            },
-            json={
-                "model": "claude-sonnet-4-20250514",
-                "max_tokens": 300,
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": b64_image
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": """Du überwachst einen Patienten in einem Krankenbett/Pflegebett.
-Analysiere das Bild und antworte NUR mit einem JSON-Objekt:
-{
-  "status": "ok" | "warning" | "critical",
-  "beschreibung": "kurze Beschreibung was du siehst",
-  "aktion": null | "Empfohlene sofortige Maßnahme"
-}
-
-Regeln:
-- "ok": Patient liegt ruhig im Bett oder ist nicht zu sehen
-- "warning": Patient bewegt sich stark, sitzt aufrecht am Bettrand, oder ungewöhnliche Position
-- "critical": Patient liegt auf dem Boden oder ist aus dem Bett gefallen
-
-Antworte NUR mit dem JSON, kein weiterer Text."""
-                        }
-                    ]
-                }]
-            },
-            timeout=10
+    @staticmethod
+    def _dummy_frame() -> bytes:
+        """Minimales 1×1-graues JPEG als Platzhalter."""
+        import struct, zlib
+        # Winziges 1×1 graues JPEG
+        return (
+            b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+            b"\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t"
+            b"\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a"
+            b"\x1f\x1e\x1d\x1a\x1c\x1c $.' \",#\x1c\x1c(7),01444\x1f'9=82<.342\x1e"
+            b"\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xc4\x00\x1f"
+            b"\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00"
+            b"\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xc4\x00\xb5"
+            b"\x10\x00\x02\x01\x03\x03\x02\x04\x03\x05\x05\x04\x04\x00\x00\x01"
+            b"}\x01\x02\x03\x00\x04\x11\x05\x12!1A\x06\x13Qa\x07\"q\x142\x81\x91"
+            b"\xa1\x08#B\xb1\xc1\x15R\xd1\xf0$3br\x82\t\n\x16\x17\x18\x19\x1a%"
+            b"&'()*456789:CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x83\x84\x85\x86\x87"
+            b"\x88\x89\x8a\x92\x93\x94\x95\x96\x97\x98\x99\x9a\xa2\xa3\xa4\xa5"
+            b"\xa6\xa7\xa8\xa9\xaa\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xc2\xc3"
+            b"\xc4\xc5\xc6\xc7\xc8\xc9\xca\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda"
+            b"\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xf1\xf2\xf3\xf4\xf5\xf6"
+            b"\xf7\xf8\xf9\xfa\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xfb\xd4P\x00"
+            b"\x00\x00\x1f\xff\xd9"
         )
 
-        if response.status_code == 200:
-            text = response.json()["content"][0]["text"].strip()
-            # Clean possible markdown fences
-            text = text.replace("```json", "").replace("```", "").strip()
-            data = json.loads(text)
-            return data, None
-        else:
-            return None, f"API Fehler: {response.status_code}"
-
-    except json.JSONDecodeError as e:
-        return None, f"JSON Parse Fehler: {e}"
-    except Exception as e:
-        return None, f"Anfrage Fehler: {e}"
+    def stop(self):
+        if PICAMERA_AVAILABLE:
+            self.cam.stop_recording()
 
 
-def ai_monitor_loop():
-    """Background thread: periodically analyses camera frame."""
-    log.info("KI-Überwachung gestartet")
+# ---------------------------------------------------------------------------
+# Flask-App
+# ---------------------------------------------------------------------------
+app = Flask(__name__)
+camera = Camera()
+
+HTML_PAGE = """<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RPi 5 – Kameralive</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0f;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    header h1 {
+      font-size: 1.4rem;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: #7ef7a0;
+      text-shadow: 0 0 12px #3cff7080;
+    }
+    header p {
+      font-size: .75rem;
+      color: #555;
+      margin-top: .35rem;
+      letter-spacing: .1em;
+    }
+
+    .frame {
+      position: relative;
+      border: 1px solid #1e4d2b;
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 0 40px #00ff4415, 0 0 0 1px #0f2a14;
+      max-width: 900px;
+      width: 100%;
+    }
+    .frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    /* Scan-line overlay */
+    .frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 3px,
+        rgba(0,0,0,.18) 3px,
+        rgba(0,0,0,.18) 4px
+      );
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      margin-top: 1rem;
+      padding: .3rem .7rem;
+      border: 1px solid #1e4d2b;
+      border-radius: 2px;
+      font-size: .7rem;
+      letter-spacing: .12em;
+      color: #7ef7a0;
+    }
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #3cff70;
+      box-shadow: 0 0 6px #3cff70;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: .3; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Raspberry Pi&nbsp;5 &mdash; Live Camera</h1>
+    <p>MJPEG · {{ res }} · {{ fps }}&thinsp;fps</p>
+  </header>
+
+  <div class="frame">
+    <img src="/stream" alt="Live-Kamerabild" />
+  </div>
+
+  <div class="badge">
+    <span class="dot"></span> LIVE
+  </div>
+</body>
+</html>"""
+
+
+def generate_frames():
+    """MJPEG-Generator: liefert Frame für Frame an den Browser."""
     while True:
-        time.sleep(AI_CHECK_INTERVAL)
-        if not camera.running:
-            continue
-
-        b64 = camera.get_base64()
-        if b64 is None:
-            continue
-
-        result, error = analyze_frame_with_claude(b64)
-
-        if error:
-            log.error(f"AI Fehler: {error}")
-            with alerts.lock:
-                alerts.last_analysis = f"KI Fehler: {error}"
-            socketio.emit('status_update', {'analysis': f"⚠ {error}", 'status': alerts.status})
-            continue
-
-        with alerts.lock:
-            alerts.last_analysis = result.get("beschreibung", "")
-
-        status = result.get("status", "ok")
-        beschreibung = result.get("beschreibung", "")
-        aktion = result.get("aktion")
-
-        socketio.emit('status_update', {
-            'analysis': beschreibung,
-            'status': status,
-            'aktion': aktion
-        })
-
-        if status == "critical":
-            msg = f"⚠️ STURZ ERKANNT: {beschreibung}"
-            if aktion:
-                msg += f" → {aktion}"
-            alerts.add_alert(msg, "critical")
-        elif status == "warning":
-            msg = f"Achtung: {beschreibung}"
-            alerts.add_alert(msg, "warning")
-        else:
-            with alerts.lock:
-                alerts.status = "monitoring"
+        frame = camera.get_frame()
+        yield (
+            b"--frame\r\n"
+            b"Content-Type: image/jpeg\r\n\r\n"
+            + frame +
+            b"\r\n"
+        )
 
 
-# ── Auth ───────────────────────────────────────────────────────────────────────
-def login_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not session.get('authenticated'):
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated
-
-# ── Routes ─────────────────────────────────────────────────────────────────────
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    error = None
-    if request.method == 'POST':
-        if request.form.get('password') == PASSWORD:
-            session['authenticated'] = True
-            session.permanent = True
-            return redirect(url_for('index'))
-        error = "Falsches Passwort"
-    return render_template('login.html', error=error)
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-@app.route('/')
-@login_required
+@app.route("/")
 def index():
-    return render_template('index.html')
-
-@app.route('/video_feed')
-@login_required
-def video_feed():
-    def generate():
-        while True:
-            jpeg = camera.get_jpeg()
-            if jpeg:
-                yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n')
-            time.sleep(0.033)   # ~30fps
-    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-@app.route('/api/alerts')
-@login_required
-def get_alerts():
-    with alerts.lock:
-        return jsonify({
-            'alerts': alerts.alerts,
-            'status': alerts.status,
-            'analysis': alerts.last_analysis
-        })
-
-@app.route('/api/snapshot')
-@login_required
-def snapshot():
-    b64 = camera.get_base64()
-    if b64:
-        return jsonify({'image': b64})
-    return jsonify({'error': 'Kein Bild verfügbar'}), 503
-
-# ── Main ───────────────────────────────────────────────────────────────────────
-if __name__ == '__main__':
-    if ANTHROPIC_API_KEY:
-        threading.Thread(target=ai_monitor_loop, daemon=True).start()
-    else:
-        log.warning("ANTHROPIC_API_KEY nicht gesetzt — KI-Überwachung deaktiviert")
-
-    # Bind only to local network (not 0.0.0.0 would allow all, but we use firewall/wlan)
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
+    return render_template_string(
+        HTML_PAGE,
+        res=f"{RESOLUTION[0]}×{RESOLUTION[1]}",
+        fps=FRAMERATE,
+    )
 
 
+@app.route("/stream")
+def stream():
+    return Response(
+        generate_frames(),
+        mimetype="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Start
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    import socket
+    try:
+        ip = socket.gethostbyname(socket.gethostname())
+    except Exception:
+        ip = "127.0.0.1"
+    print(f"🌐  Server läuft → http://{ip}:{PORT}")
+    try:
+        app.run(host=HOST, port=PORT, threaded=True)
+    finally:
+        camera.stop()
